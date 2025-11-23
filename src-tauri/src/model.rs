@@ -34,3 +34,26 @@ pub struct Patient {
     pub insurance_provider: Option<String>,
     pub insurance_id: Option<String>,
 }
+
+#[derive(Debug, Deserialize, Serialize)]
+pub struct CreateMedicationDto {
+    pub name: String,
+    pub din: String,          // The Canadian Standard (Required)
+    pub ndc: Option<String>,  // Optional (for barcodes/US imports)
+    pub description: Option<String>,
+    pub stock: i32,
+    pub price: f64,
+    pub expiration: String,
+}
+
+#[derive(Debug, Serialize, sqlx::FromRow)]
+pub struct Medication {
+    pub id: i64,
+    pub name: String,
+    pub din: String,
+    pub ndc: Option<String>,
+    pub description: Option<String>,
+    pub stock: i32,
+    pub price: f64,
+    pub expiration: String,
+}
