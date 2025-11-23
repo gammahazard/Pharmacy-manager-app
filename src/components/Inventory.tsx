@@ -13,100 +13,132 @@ interface Medication {
   expiration: string;
 }
 
-const Inventory: Component = () => {
+interface InventoryProps {
+  currentUser: { username: string; role: string } | null;
+}
+
+const Inventory: Component<InventoryProps> = (props) => {
   const [medList, setMedList] = createSignal<Medication[]>([]);
-  const [isAddModalOpen, setAddModalOpen] = createSignal(false);
+  
+  // Modal State
+  const [isModalOpen, setModalOpen] = createSignal(false);
+  const [modalMode, setModalMode] = createSignal<"add" | "edit">("add");
+  const [editingId, setEditingId] = createSignal<number | null>(null);
+  
+  // Form Fields (Signals for binding)
+  const [name, setName] = createSignal("");
+  const [din, setDin] = createSignal("");
+  const [ndc, setNdc] = createSignal("");
+  const [desc, setDesc] = createSignal("");
+  const [stock, setStock] = createSignal<number | "">("");
+  const [price, setPrice] = createSignal<number | "">("");
+  const [exp, setExp] = createSignal("");
+
   const [statusMsg, setStatusMsg] = createSignal("");
 
-  // --- FETCH DATA ---
+  // --- ACTIONS ---
+
   async function fetchMeds() {
     try {
-      const meds = await invoke<Medication[]>("get_medications");
-      setMedList(meds);
-    } catch (e) {
-      console.error("Failed to fetch inventory:", e);
+      setMedList(await invoke("get_medications"));
+    } catch (e) { 
+        console.error(e); // <--- FIX IS HERE (Added curly braces)
     }
   }
 
   onMount(fetchMeds);
 
-  // --- SAVE DATA ---
+  // Open "Add" Modal
+  function openAdd() {
+    setModalMode("add");
+    setEditingId(null);
+    // Clear form
+    setName(""); setDin(""); setNdc(""); setDesc(""); setStock(""); setPrice(""); setExp("");
+    setStatusMsg("");
+    setModalOpen(true);
+  }
+
+  // Open "Edit" Modal
+  function openEdit(med: Medication) {
+    setModalMode("edit");
+    setEditingId(med.id);
+    // Pre-fill form
+    setName(med.name);
+    setDin(med.din);
+    setNdc(med.ndc || "");
+    setDesc(med.description || "");
+    setStock(med.stock);
+    setPrice(med.price);
+    setExp(med.expiration);
+    setStatusMsg("");
+    setModalOpen(true);
+  }
+
   async function handleSave(e: Event) {
     e.preventDefault();
-    setStatusMsg("Adding to formulary...");
+    setStatusMsg("Saving...");
 
-    const formData = new FormData(e.target as HTMLFormElement);
-    
-    // Parse numbers correctly for Rust (i32 and f64)
-    const stockVal = parseInt(formData.get("stock") as string) || 0;
-    const priceVal = parseFloat(formData.get("price") as string) || 0.0;
-
-    const payload = {
-      name: formData.get("name") as string,
-      din: formData.get("din") as string,
-      ndc: (formData.get("ndc") as string) || null,
-      description: (formData.get("description") as string) || null,
-      stock: stockVal,
-      price: priceVal,
-      expiration: formData.get("expiration") as string,
-    };
+    const stockVal = Number(stock());
+    const priceVal = Number(price());
 
     try {
-      await invoke("add_medication", { data: payload });
-      setStatusMsg("");
-      setAddModalOpen(false);
-      fetchMeds(); // Refresh table
-      (e.target as HTMLFormElement).reset();
+      if (modalMode() === "add") {
+        // --- ADD LOGIC ---
+        await invoke("add_medication", { 
+            data: { 
+                logged_in_user: props.currentUser?.username || "unknown",
+                name: name(), din: din(), ndc: ndc() || null, description: desc() || null,
+                stock: stockVal, price: priceVal, expiration: exp()
+            } 
+        });
+      } else {
+        // --- EDIT LOGIC ---
+        await invoke("update_medication", {
+            data: {
+                logged_in_user: props.currentUser?.username || "unknown",
+                id: editingId(),
+                stock: stockVal,
+                price: priceVal,
+                description: desc() || null
+                // Name/DIN not sent to prevent identity changes
+            }
+        });
+      }
+      
+      setStatusMsg("Saved!");
+      setModalOpen(false);
+      fetchMeds();
     } catch (err) {
       console.error(err);
-      setStatusMsg("Error: Check console (DIN might be duplicate)");
+      setStatusMsg("Error: " + err);
     }
   }
 
   return (
     <div class="p-content">
-      {/* HEADER */}
       <div class="header-row">
-        <div>
-            <h2>Inventory & Formulary</h2>
-            <p class="subtitle">Total SKUs: {medList().length}</p>
-        </div>
-        <button class="btn-primary" onClick={() => setAddModalOpen(true)}>
-            + Add Drug
-        </button>
+        <div><h2>Inventory</h2><p class="subtitle">{medList().length} Items</p></div>
+        <button class="btn-primary" onClick={openAdd}>+ Add Drug</button>
       </div>
 
-      {/* DATA TABLE */}
       <div class="panel table-panel">
         <div class="table-container">
-          {/* Reusing 'patient-table' class for consistent styling */}
           <table class="patient-table">
             <thead>
               <tr>
-                <th style="width: 100px;">DIN</th>
-                <th>Drug Name</th>
-                <th style="width: 80px;">Stock</th>
-                <th style="width: 100px;">Price</th>
-                <th style="width: 120px;">Expires</th>
-                <th style="width: 80px;">Action</th>
+                <th>DIN</th><th>Name</th><th>Stock</th><th>Price</th><th>Action</th>
               </tr>
             </thead>
             <tbody>
               <For each={medList()}>
                 {(med) => (
                   <tr>
-                    <td class="fw-bold text-muted">{med.din}</td>
+                    <td class="text-muted">{med.din}</td>
                     <td class="fw-bold">{med.name}</td>
-                    
-                    {/* Visual Logic: Red text if stock is low (< 100) */}
-                    <td style={med.stock < 100 ? "color: #ef4444; font-weight: bold" : ""}>
-                        {med.stock}
-                    </td>
-                    
+                    <td style={med.stock < 100 ? "color:red" : ""}>{med.stock}</td>
                     <td>${med.price.toFixed(2)}</td>
-                    <td>{med.expiration}</td>
                     <td>
-                      <button class="btn-small">Edit</button>
+                      <button class="btn-small" onClick={() => openEdit(med)}>Edit</button>
                     </td>
                   </tr>
                 )}
@@ -119,49 +151,40 @@ const Inventory: Component = () => {
         </div>
       </div>
 
-      {/* --- MODAL: ADD MEDICATION --- */}
-      <Show when={isAddModalOpen()}>
+      {/* MODAL FORM */}
+      <Show when={isModalOpen()}>
         <div class="modal-overlay">
             <div class="modal">
                 <div class="modal-header">
-                    <h3>Add to Formulary</h3>
-                    <button class="close-btn" onClick={() => setAddModalOpen(false)}>×</button>
+                    <h3>{modalMode() === "add" ? "Add Drug" : "Edit Inventory"}</h3>
+                    <button class="close-btn" onClick={() => setModalOpen(false)}>×</button>
                 </div>
-                
                 <form onSubmit={handleSave} class="modal-form">
-                    
-                    <div class="form-section">
-                        <h4>Identification</h4>
-                        <div class="form-grid">
-                            <label class="span-2">Drug Name (Brand/Generic) * <input name="name" required placeholder="e.g. Amoxicillin 500mg" />
-                            </label>
-                            <label>DIN (Health Canada) * <input name="din" required placeholder="02245678" />
-                            </label>
-                            <label>NDC / UPC (Optional)
-                                <input name="ndc" placeholder="Barcode" />
-                            </label>
-                        </div>
+                    <div class="form-grid">
+                        <label class="span-2">Name 
+                            <input value={name()} onInput={(e)=>setName(e.currentTarget.value)} disabled={modalMode()==="edit"} required />
+                        </label>
+                        <label>DIN 
+                            <input value={din()} onInput={(e)=>setDin(e.currentTarget.value)} disabled={modalMode()==="edit"} required />
+                        </label>
+                        <label>Stock 
+                            <input type="number" value={stock()} onInput={(e)=>setStock(e.currentTarget.valueAsNumber)} required />
+                        </label>
+                        <label>Price 
+                            <input type="number" step="0.01" value={price()} onInput={(e)=>setPrice(e.currentTarget.valueAsNumber)} required />
+                        </label>
+                        <label>Expiration 
+                            <input type="date" value={exp()} onInput={(e)=>setExp(e.currentTarget.value)} required />
+                        </label>
+                        <label>Description 
+                            <input value={desc()} onInput={(e)=>setDesc(e.currentTarget.value)} />
+                        </label>
+                        <label>NDC (Optional) 
+                            <input value={ndc()} onInput={(e)=>setNdc(e.currentTarget.value)} disabled={modalMode()==="edit"} />
+                        </label>
                     </div>
-
-                    <div class="form-section">
-                        <h4>Inventory Control</h4>
-                        <div class="form-grid">
-                            <label>Initial Stock * <input name="stock" type="number" required placeholder="0" />
-                            </label>
-                            <label>Cash Price ($) * <input name="price" type="number" step="0.01" required placeholder="0.00" />
-                            </label>
-                            <label>Expiration Date * <input name="expiration" type="date" required />
-                            </label>
-                            <label>Description / Location 
-                                <input name="description" placeholder="Shelf A2" />
-                            </label>
-                        </div>
-                    </div>
-
                     <div class="modal-footer">
-                        <span class="status">{statusMsg()}</span>
-                        <button type="button" class="btn-secondary" onClick={() => setAddModalOpen(false)}>Cancel</button>
-                        <button type="submit" class="btn-primary">Add Item</button>
+                        <button type="submit" class="btn-primary">Save Changes</button>
                     </div>
                 </form>
             </div>

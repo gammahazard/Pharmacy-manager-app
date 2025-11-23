@@ -1,6 +1,7 @@
 import { createSignal, onMount, For, Show, type Component } from "solid-js";
 import { invoke } from "@tauri-apps/api/core";
 
+// --- TYPES ---
 interface Patient {
   id: number;
   name: string;
@@ -17,30 +18,66 @@ interface Patient {
   insurance_id?: string;
 }
 
-const PatientManager: Component = () => {
+interface HistoryItem {
+  id: number;
+  drug_name: string;
+  sig: string;
+  quantity: number;
+  date_filled: string;
+  next_refill_date: string;
+}
+
+interface PatientManagerProps {
+  currentUser: { username: string; role: string } | null;
+}
+
+const PatientManager: Component<PatientManagerProps> = (props) => {
+  // --- STATE ---
   const [patientList, setPatientList] = createSignal<Patient[]>([]);
-  
-  // State for the "Add New" Modal
   const [isAddModalOpen, setAddModalOpen] = createSignal(false);
-  
-  // State for the "View Details" Modal (Stores the specific patient clicked)
   const [selectedPatient, setSelectedPatient] = createSignal<Patient | null>(null);
+  const [history, setHistory] = createSignal<HistoryItem[]>([]);
+  
+  // Search State
+  const [searchQuery, setSearchQuery] = createSignal("");
   
   const [statusMsg, setStatusMsg] = createSignal("");
 
-  // --- FETCH DATA ---
+  // --- FETCH LIST (With Search) ---
   async function fetchPatients() {
     try {
-      const patients = await invoke<Patient[]>("get_patients");
+      // We pass the optional search query to the backend
+      const patients = await invoke<Patient[]>("get_patients", { 
+        search: searchQuery() 
+      });
       setPatientList(patients);
     } catch (e) {
       console.error("Failed to fetch patients:", e);
     }
   }
 
+  // Auto-search handler
+  const handleSearch = (e: InputEvent) => {
+    setSearchQuery((e.target as HTMLInputElement).value);
+    fetchPatients();
+  };
+
   onMount(fetchPatients);
 
-  // --- SAVE DATA (For New Patient) ---
+  // --- FETCH DETAILS & HISTORY ---
+  async function openPatientDetails(patient: Patient) {
+    setSelectedPatient(patient);
+    setHistory([]); 
+    
+    try {
+      const data = await invoke<HistoryItem[]>("get_patient_history", { patientId: patient.id });
+      setHistory(data);
+    } catch (e) {
+      console.error("Failed to load history:", e);
+    }
+  }
+
+  // --- SAVE NEW PATIENT ---
   async function handleSave(e: Event) {
     e.preventDefault();
     setStatusMsg("Saving...");
@@ -48,6 +85,9 @@ const PatientManager: Component = () => {
     const formData = new FormData(e.target as HTMLFormElement);
     
     const payload = {
+      // AUDIT LOGGING: Pass the username
+      logged_in_user: props.currentUser?.username || "unknown",
+      
       name: formData.get("name") as string,
       birth_date: formData.get("birth_date") as string,
       phone: formData.get("phone") as string,
@@ -66,28 +106,39 @@ const PatientManager: Component = () => {
       await invoke("add_patient", { data: payload });
       setStatusMsg("");
       setAddModalOpen(false);
-      fetchPatients();
+      fetchPatients(); 
       (e.target as HTMLFormElement).reset();
     } catch (err) {
       console.error(err);
-      setStatusMsg("Error saving.");
+      setStatusMsg("Error saving patient.");
     }
   }
 
   return (
     <div class="p-content">
-      {/* HEADER */}
+      {/* --- HEADER --- */}
       <div class="header-row">
         <div>
             <h2>Patient Directory</h2>
-            <p class="subtitle">{patientList().length} Active Patients</p>
+            <p class="subtitle">{patientList().length} Profiles Found</p>
         </div>
-        <button class="btn-primary" onClick={() => setAddModalOpen(true)}>
-            + New Patient
-        </button>
+        
+        <div style="display: flex; gap: 10px;">
+            {/* SEARCH INPUT */}
+            <input 
+                type="text" 
+                placeholder="Search Name or Medication..." 
+                value={searchQuery()} 
+                onInput={handleSearch}
+                style="padding: 10px; width: 250px; border: 1px solid #cbd5e1; border-radius: 6px;"
+            />
+            <button class="btn-primary" onClick={() => setAddModalOpen(true)}>
+                + New Patient
+            </button>
+        </div>
       </div>
 
-      {/* MINIMAL TABLE (Clean List) */}
+      {/* --- MAIN TABLE (LIST) --- */}
       <div class="panel table-panel">
         <div class="table-container">
           <table class="patient-table">
@@ -103,7 +154,7 @@ const PatientManager: Component = () => {
             <tbody>
               <For each={patientList()}>
                 {(patient) => (
-                  <tr onClick={() => setSelectedPatient(patient)} style="cursor: pointer">
+                  <tr onClick={() => openPatientDetails(patient)} style="cursor: pointer">
                     <td class="text-muted">#{patient.id}</td>
                     <td class="fw-bold">{patient.name}</td>
                     <td>{patient.birth_date}</td>
@@ -114,6 +165,9 @@ const PatientManager: Component = () => {
                   </tr>
                 )}
               </For>
+              <Show when={patientList().length === 0}>
+                  <tr><td colspan="5" class="empty-state">No patients found. Try a different search.</td></tr>
+              </Show>
             </tbody>
           </table>
         </div>
@@ -128,7 +182,6 @@ const PatientManager: Component = () => {
                     <button class="close-btn" onClick={() => setAddModalOpen(false)}>×</button>
                 </div>
                 <form onSubmit={handleSave} class="modal-form">
-                    {/* (Reuse the same form layout we built before) */}
                     <div class="form-section">
                         <h4>Demographics</h4>
                         <div class="form-grid">
@@ -166,60 +219,76 @@ const PatientManager: Component = () => {
         </div>
       </Show>
 
-      {/* --- MODAL 2: VIEW DETAILS (Read Only) --- */}
+      {/* --- MODAL 2: VIEW DETAILS & HISTORY --- */}
       <Show when={selectedPatient() !== null}>
         <div class="modal-overlay" onClick={(e) => { if(e.target === e.currentTarget) setSelectedPatient(null) }}>
-            <div class="modal">
+            <div class="modal" style="width: 800px; max-width: 95%;">
                 <div class="modal-header">
-                    <h3>Patient Details: #{selectedPatient()!.id}</h3>
+                    <h3>{selectedPatient()!.name}</h3>
                     <button class="close-btn" onClick={() => setSelectedPatient(null)}>×</button>
                 </div>
                 
                 <div class="modal-form">
-                    {/* Read-Only Display */}
-                    <div class="form-section">
-                        <h4>Personal Info</h4>
-                        <div class="form-grid">
-                            <div><label>Full Name</label> <div>{selectedPatient()!.name}</div></div>
-                            <div><label>Date of Birth</label> <div>{selectedPatient()!.birth_date}</div></div>
-                            <div><label>Health Card</label> <div>{selectedPatient()!.health_card_num}</div></div>
-                            <div><label>Phone</label> <div>{selectedPatient()!.phone}</div></div>
-                            <div class="span-2"><label>Email</label> <div>{selectedPatient()!.email || "-"}</div></div>
-                        </div>
-                    </div>
-
-                    <div class="form-section">
-                        <h4>Address</h4>
-                        <div class="form-grid">
-                             <div class="span-2">
-                                <div>{selectedPatient()!.address}</div>
-                                <div>{selectedPatient()!.city}, {selectedPatient()!.state} {selectedPatient()!.postal_code}</div>
+                    {/* TOP: Static Patient Info */}
+                    <div class="form-grid" style="background: #f8fafc; padding: 15px; border-radius: 8px; margin-bottom: 20px;">
+                        <div><label>DOB</label> <div>{selectedPatient()!.birth_date}</div></div>
+                        <div><label>Health Card</label> <div>{selectedPatient()!.health_card_num}</div></div>
+                        <div><label>Phone</label> <div>{selectedPatient()!.phone}</div></div>
+                        <div><label>Address</label> <div>{selectedPatient()!.address}, {selectedPatient()!.city}</div></div>
+                        <div class="span-2">
+                             <label>Allergies</label> 
+                             <div style="color: #ef4444; font-weight: bold;">
+                                {selectedPatient()!.allergies || "No Known Allergies"}
                              </div>
                         </div>
                     </div>
 
+                    {/* BOTTOM: Prescription History Table */}
                     <div class="form-section">
-                        <h4>Clinical & Billing</h4>
-                        <div class="form-grid">
-                            <div class="span-2">
-                                <label>Allergies</label> 
-                                <div style="color: #ef4444; font-weight: bold;">{selectedPatient()!.allergies || "No Known Allergies"}</div>
-                            </div>
-                            <div><label>Insurance</label> <div>{selectedPatient()!.insurance_provider || "Cash Pay"}</div></div>
-                            <div><label>ID #</label> <div>{selectedPatient()!.insurance_id || "-"}</div></div>
+                        <h4 style="border-bottom: 1px solid #eee; padding-bottom: 10px; margin-bottom: 10px;">Prescription History</h4>
+                        
+                        <div class="table-container" style="max-height: 300px; overflow-y: auto;">
+                          <table class="patient-table" style="font-size: 0.85rem;">
+                              <thead>
+                                  <tr>
+                                      <th>Date</th>
+                                      <th>Drug</th>
+                                      <th>Sig (Instructions)</th>
+                                      <th>Qty</th>
+                                      <th>Due</th>
+                                  </tr>
+                              </thead>
+                              <tbody>
+                                  <For each={history()}>
+                                      {(item) => (
+                                          <tr>
+                                              <td>{item.date_filled}</td>
+                                              <td class="fw-bold">{item.drug_name}</td>
+                                              <td class="text-truncate" style="max-width: 150px;" title={item.sig}>{item.sig}</td>
+                                              <td>{item.quantity}</td>
+                                              
+                                              {/* Logic: Red if Refill Date is Today or Past, Green if Future */}
+                                              <td style={ new Date(item.next_refill_date) <= new Date() ? "color: #ef4444; font-weight: bold" : "color: #10b981" }>
+                                                  {item.next_refill_date}
+                                              </td>
+                                          </tr>
+                                      )}
+                                  </For>
+                                  <Show when={history().length === 0}>
+                                      <tr><td colspan="5" class="empty-state">No prescription history found.</td></tr>
+                                  </Show>
+                              </tbody>
+                          </table>
                         </div>
                     </div>
                 </div>
 
-                <div class="modal-footer" style="padding: 20px; border-top: 1px solid #e2e8f0;">
+                <div class="modal-footer">
                     <button class="btn-secondary" onClick={() => setSelectedPatient(null)}>Close</button>
-                    {/* Placeholder for future features */}
-                    <button class="btn-primary">Create New Prescription</button>
                 </div>
             </div>
         </div>
       </Show>
-
     </div>
   );
 };
