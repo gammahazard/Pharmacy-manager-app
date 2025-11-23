@@ -1,78 +1,18 @@
 import { createSignal, Show } from "solid-js";
-import { invoke } from "@tauri-apps/api/core";
 import "./App.css";
 
-// Placeholder components for the different pages
-const DashboardHome = () => (
-  <div class="p-content">
-    <h2>Dashboard</h2>
-    <div class="stats-grid">
-      <div class="stat-card"><h3>12</h3><p>Rx To Fill</p></div>
-      <div class="stat-card"><h3>5</h3><p>Due Soon</p></div>
-      <div class="stat-card alert"><h3>2</h3><p>Stock Warnings</p></div>
-    </div>
-  </div>
-);
-
-const PatientView = () => {
-  // We moved the form logic here to keep App clean
-  const [name, setName] = createSignal("");
-  const [phone, setPhone] = createSignal("");
-  const [status, setStatus] = createSignal("");
-
-  async function savePatient(e: Event) {
-    e.preventDefault();
-    try {
-      await invoke("add_patient", { 
-        data: { name: name(), birth_date: "2000-01-01", phone: phone(), insurance_provider: null, insurance_id: null } 
-      });
-      setStatus("Saved!");
-      setName(""); setPhone("");
-    } catch (err) {
-      console.error(err);
-      setStatus("Failed");
-    }
-  }
-
-  return (
-    <div class="p-content">
-      <div class="header-row">
-        <h2>Patient Management</h2>
-        <button class="btn-primary">+ New Patient</button>
-      </div>
-      
-      <div class="panel">
-        <h3>Quick Add</h3>
-        <form class="inline-form" onSubmit={savePatient}>
-          <input placeholder="Name" value={name()} onInput={(e) => setName(e.currentTarget.value)} />
-          <input placeholder="Phone" value={phone()} onInput={(e) => setPhone(e.currentTarget.value)} />
-          <button type="submit">Save</button>
-        </form>
-        <p>{status()}</p>
-      </div>
-
-      <div class="panel">
-        <h3>Patient Directory</h3>
-        <p style={{color: "#888"}}>No patients found (List coming soon)</p>
-      </div>
-    </div>
-  );
-};
-
-const InventoryView = () => (
-  <div class="p-content">
-    <h2>Inventory & Formulary</h2>
-    <p>Drug database will go here.</p>
-  </div>
-);
+// Import our new split components
+import Dashboard from "./components/Dashboard";
+import PatientManager from "./components/PatientManager";
+import Inventory from "./components/Inventory";
 
 function App() {
-  // This controls which "page" is visible
+  // This state controls which component is visible
   const [currentView, setCurrentView] = createSignal("dashboard");
 
   return (
     <div class="app-shell">
-      {/* SIDEBAR */}
+      {/* SIDEBAR NAVIGATION */}
       <nav class="sidebar">
         <div class="brand">Blisstech</div>
         
@@ -104,14 +44,17 @@ function App() {
           <span class="user-info">Logged in: <b>Pharmacist</b></span>
         </header>
 
+        {/* View Switching Logic */}
         <Show when={currentView() === "dashboard"}>
-          <DashboardHome />
+          <Dashboard />
         </Show>
+        
         <Show when={currentView() === "patients"}>
-          <PatientView />
+          <PatientManager />
         </Show>
+        
         <Show when={currentView() === "inventory"}>
-          <InventoryView />
+          <Inventory />
         </Show>
       </main>
     </div>

@@ -145,3 +145,166 @@ input {
   align-items: center;
   margin-bottom: 20px;
 }
+
+/* Add to src/App.css */
+.patient-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 10px;
+}
+
+.patient-table th {
+  text-align: left;
+  background-color: #f8fafc;
+  padding: 12px;
+  border-bottom: 2px solid #e2e8f0;
+  color: #64748b;
+  font-size: 0.9rem;
+}
+
+.patient-table td {
+  padding: 12px;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.btn-small {
+  padding: 5px 10px;
+  font-size: 0.8rem;
+  background-color: transparent;
+  border: 1px solid #3b82f6;
+  color: #3b82f6;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.btn-small:hover {
+  background-color: #3b82f6;
+  color: white;
+}
+
+/* --- MODAL STYLES --- */
+.modal-overlay {
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0, 0, 0, 0.5); /* Dimmed background */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  backdrop-filter: blur(2px);
+}
+
+.modal {
+  background: white;
+  width: 600px;
+  max-width: 90%;
+  max-height: 90vh;
+  overflow-y: auto;
+  border-radius: 12px;
+  box-shadow: 0 10px 25px rgba(0,0,0,0.2);
+  display: flex;
+  flex-direction: column;
+}
+
+.modal-header {
+  padding: 20px;
+  border-bottom: 1px solid #e2e8f0;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: #f8fafc;
+}
+
+.modal-header h3 { margin: 0; color: #1e293b; }
+
+.close-btn {
+  background: none; border: none; font-size: 1.5rem; cursor: pointer; color: #64748b;
+}
+
+.modal-form { padding: 20px; }
+
+/* --- FORM GRID SYSTEM --- */
+.form-section { margin-bottom: 25px; }
+.form-section h4 { 
+  margin: 0 0 10px 0; 
+  color: #3b82f6; 
+  font-size: 0.9rem; 
+  text-transform: uppercase; 
+  letter-spacing: 0.5px; 
+}
+
+.form-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr; /* Two columns */
+  gap: 15px;
+}
+
+/* Span 2 columns (for long fields like Address) */
+.span-2 { grid-column: span 2; }
+
+label {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #475569;
+}
+
+/* Inputs inside labels */
+label input { width: 100%; box-sizing: border-box; } /* Fix width issues */
+
+.modal-footer {
+  margin-top: 20px;
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  align-items: center;
+}
+
+.btn-secondary {
+  background: white; border: 1px solid #ccc; color: #333;
+}
+
+.subtitle { color: #64748b; margin-top: -15px; font-size: 0.9rem;}
+.fw-bold { font-weight: 600; color: #0f172a; }
+.empty-state { text-align: center; padding: 40px; color: #94a3b8; }
+
+/* --- TABLE IMPROVEMENTS --- */
+
+/* 1. The Scroll Safety Net */
+/* This ensures if the screen is tiny, only the table scrolls, not the whole page */
+.table-container {
+  width: 100%;
+  overflow-x: auto;
+}
+
+/* 2. Fix the Table Layout */
+.patient-table {
+  width: fit-content;
+  border-collapse: separate; /* Allows for border radius */
+  border-spacing: 0;
+  table-layout: auto; /* CRITICAL: Forces columns to respect width */
+}
+
+/* 3. Handle Long Text (Insurance names) */
+.text-truncate {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 150px; /* Adjust based on preference */
+}
+
+/* 4. Visual Polish */
+
+
+.text-muted { color: #94a3b8; }
+
+.badge-gray {
+  background: #f1f5f9;
+  color: #64748b;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
